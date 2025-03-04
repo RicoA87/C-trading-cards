@@ -10,5 +10,11 @@
     "discord.js": "^14.11.0",
     "sqlite3": "^5.1.6",
     "dotenv": "^16.0.3"
-  }
+ "dependencies": {
+  "discord.js": "^14.11.0",
+  "@discordjs/rest": "^1.6.0",
+  "sqlite3": "^5.1.6",
+  "dotenv": "^16.0.3"
+}
+ }
 }
