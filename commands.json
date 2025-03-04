@@ -1,0 +1,12 @@
+{
+  "ping": "!ping",
+  "claim": "!claim",
+  "balance": "!balance",
+  "trade": "!trade",
+  "sell": "!sell",
+  "joinBreak": "!joinbreak",
+  "startBreak": "!startbreak",
+  "auction": "!auction",
+  "giveCard": "!givecard",
+  "giveCoins": "!givecoins"
+}
