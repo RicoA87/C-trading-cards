@@ -23,7 +23,8 @@ const db = new sqlite3.Database(config.databasePath, (err) => {
 // Ensure users table exists
 db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
-    balance INTEGER DEFAULT 0
+    balance INTEGER DEFAULT 0,
+    last_claim INTEGER DEFAULT 0
 )`, (err) => {
     if (err) console.error("❌ Error creating users table:", err.message);
     else console.log("✅ Users table is ready.");
@@ -59,19 +60,26 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
     const userId = interaction.user.id;
+    const now = Date.now();
+    const cooldown = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
     if (interaction.commandName === 'ping') {
         await interaction.reply('🏓 Pong!');
     } else if (interaction.commandName === 'claim') {
-        db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
+        db.get(`SELECT balance, last_claim FROM users WHERE user_id = ?`, [userId], (err, row) => {
             if (err) {
                 console.error("❌ Database Error:", err.message);
                 return interaction.reply('❌ Error accessing balance.');
             }
 
+            if (row && now - row.last_claim < cooldown) {
+                const remainingTime = Math.ceil((cooldown - (now - row.last_claim)) / (60 * 60 * 1000));
+                return interaction.reply(`⏳ You can claim again in **${remainingTime} hours**.`);
+            }
+
             const amount = economy.claimAmount;
             if (!row) {
-                db.run(`INSERT INTO users (user_id, balance) VALUES (?, ?)`, [userId, amount], (err) => {
+                db.run(`INSERT INTO users (user_id, balance, last_claim) VALUES (?, ?, ?)`, [userId, amount, now], (err) => {
                     if (err) {
                         console.error("❌ Error inserting new user:", err.message);
                         return interaction.reply('❌ Could not claim coins.');
@@ -79,7 +87,7 @@ client.on('interactionCreate', async (interaction) => {
                     interaction.reply(`✅ You have claimed **${amount} coins**!`);
                 });
             } else {
-                db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [amount, userId], (err) => {
+                db.run(`UPDATE users SET balance = balance + ?, last_claim = ? WHERE user_id = ?`, [amount, now, userId], (err) => {
                     if (err) {
                         console.error("❌ Error updating balance:", err.message);
                         return interaction.reply('❌ Could not claim coins.');
