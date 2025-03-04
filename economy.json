@@ -1,6 +1,6 @@
 {
-  "claim": "!claim",
-  "balance": "!balance",
+  "claim": "/claim",
+  "balance": "/balance",
   "claimAmount": 250,
   "dailyBonus": 500,
   "streakBonus": {
