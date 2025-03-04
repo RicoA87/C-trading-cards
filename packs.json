@@ -1,0 +1,20 @@
+{
+  "standardPack": {
+    "cost": 200,
+    "rarityProbabilities": {
+      "base": 50,
+      "standard": 30,
+      "uncommon": 15,
+      "rare": 5
+    }
+  },
+  "specialPack": {
+    "cost": 500,
+    "rarityProbabilities": {
+      "rare": 50,
+      "ultra": 30,
+      "epic": 15,
+      "legendary": 5
+    }
+  }
+}
