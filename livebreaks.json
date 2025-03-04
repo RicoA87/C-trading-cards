@@ -1,0 +1,6 @@
+{
+  "join": "!joinbreak",
+  "start": "!startbreak",
+  "entryFee": 1000,
+  "guaranteedHighRarity": true
+}
