@@ -1,0 +1,5 @@
+{
+  "auctionCommand": "!auction",
+  "minBidIncrement": 50,
+  "auctionDuration": "24h"
+}
