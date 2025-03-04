@@ -4,8 +4,7 @@
   "description": "A Discord bot for collecting and trading digital cards.",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
-    "postinstall": "npm install"
+    "start": "node bot.js"
   },
   "dependencies": {
     "discord.js": "^14.11.0",
