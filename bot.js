@@ -1,13 +1,13 @@
-// Discord Card Collecting Bot
+// Discord Card Collecting Bot with Slash Commands
 // This bot allows players to collect, trade, and manage digital trading cards.
-// Developed with features including packs, crafting, auctions, leaderboards, and live breaks.
+// Features include packs, crafting, auctions, leaderboards, and live breaks.
 
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 require('dotenv').config();
 const fs = require('fs');
 
-// Load configuration files dynamically
+// Load configuration files
 const config = JSON.parse(fs.readFileSync('./config.json'));
 const commands = JSON.parse(fs.readFileSync('./commands.json'));
 const economy = JSON.parse(fs.readFileSync('./economy.json'));
@@ -16,31 +16,50 @@ const packs = JSON.parse(fs.readFileSync('./packs.json'));
 const auction = JSON.parse(fs.readFileSync('./auction.json'));
 const admin = JSON.parse(fs.readFileSync('./admin.json'));
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const db = new sqlite3.Database(config.databasePath, (err) => {
     if (err) console.error(err.message);
     console.log('Connected to the SQLite database.');
 });
 
-// Bot is ready event
-client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-});
+// Define slash commands
+const slashCommands = [
+    new SlashCommandBuilder().setName('ping').setDescription('Check bot response'),
+    new SlashCommandBuilder().setName('claim').setDescription('Claim your daily coins'),
+    new SlashCommandBuilder().setName('balance').setDescription('Check your balance'),
+    new SlashCommandBuilder().setName('joinbreak').setDescription('Join a live break').addStringOption(option => option.setName('break_name').setDescription('Name of the break').setRequired(true))
+].map(command => command.toJSON());
 
-// Basic command to test bot response
-client.on('messageCreate', async (message) => {
-    if (message.content.startsWith(commands.ping)) {
-        message.reply('Pong! 🏓');
+// Register Slash Commands
+client.once('ready', async () => {
+    console.log(`Logged in as ${client.user.tag}!`);
+
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+    
+    try {
+        console.log("Registering slash commands...");
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: slashCommands }
+        );
+        console.log("✅ Slash commands registered successfully!");
+    } catch (error) {
+        console.error("❌ Error registering slash commands:", error);
     }
 });
 
-// Economy System: Claim and Check Balance
-client.on('messageCreate', async (message) => {
-    if (message.content.startsWith(economy.claim)) {
-        const userId = message.author.id;
-        
+// Handle slash command interactions
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isCommand()) return;
+
+    const { commandName } = interaction;
+    const userId = interaction.user.id;
+
+    if (commandName === 'ping') {
+        await interaction.reply('🏓 Pong!');
+    } else if (commandName === 'claim') {
         db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
-            if (err) return message.reply('❌ Error accessing balance.');
+            if (err) return interaction.reply('❌ Error accessing balance.');
             
             const amount = economy.claimAmount;
             if (!row) {
@@ -48,48 +67,33 @@ client.on('messageCreate', async (message) => {
             } else {
                 db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [amount, userId]);
             }
-            message.reply(`✅ You have claimed **${amount} coins**! Your balance has been updated.`);
+            interaction.reply(`✅ You have claimed **${amount} coins**! Your balance has been updated.`);
         });
-    }
-});
-
-client.on('messageCreate', async (message) => {
-    if (message.content.startsWith(economy.balance)) {
-        const userId = message.author.id;
-        
+    } else if (commandName === 'balance') {
         db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
-            if (err) return message.reply('❌ Error accessing balance.');
+            if (err) return interaction.reply('❌ Error accessing balance.');
             
             const balance = row ? row.balance : 0;
-            message.reply(`💰 Your current balance is: **${balance} coins**`);
+            interaction.reply(`💰 Your current balance is: **${balance} coins**`);
         });
-    }
-});
-
-// Live Breaks System - Join a Break
-client.on('messageCreate', async (message) => {
-    if (message.content.startsWith(liveBreaks.join)) {
-        const args = message.content.split(' ');
-        if (args.length < 2) return message.reply('Usage: !joinbreak <break_name>');
-        
-        const userId = message.author.id;
-        const breakName = args[1];
+    } else if (commandName === 'joinbreak') {
+        const breakName = interaction.options.getString('break_name');
         
         db.get(`SELECT id, price FROM live_breaks WHERE name = ?`, [breakName], (err, row) => {
-            if (err || !row) return message.reply('❌ Live break not found.');
+            if (err || !row) return interaction.reply('❌ Live break not found.');
             
             const breakId = row.id;
             const price = row.price;
             
             db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, userRow) => {
                 if (err || !userRow || userRow.balance < price) {
-                    return message.reply('❌ You do not have enough coins to join this break.');
+                    return interaction.reply('❌ You do not have enough coins to join this break.');
                 }
                 
                 db.run(`UPDATE users SET balance = balance - ? WHERE user_id = ?`, [price, userId]);
                 db.run(`INSERT INTO live_break_entries (user_id, break_id) VALUES (?, ?)`, [userId, breakId]);
                 
-                message.reply(`✅ You have successfully joined the live break **${breakName}**!`);
+                interaction.reply(`✅ You have successfully joined the live break **${breakName}**!`);
             });
         });
     }
