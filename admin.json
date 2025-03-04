@@ -1,0 +1,7 @@
+{
+  "giveCard": "!givecard",
+  "giveCoins": "!givecoins",
+  "setPackDrops": "!setpackdrops",
+  "createBreak": "!createbreak",
+  "distributeRewards": "!distributerewards"
+}
