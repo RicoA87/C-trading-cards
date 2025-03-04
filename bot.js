@@ -9,25 +9,31 @@ const fs = require('fs');
 
 // Load configuration files
 const config = JSON.parse(fs.readFileSync('./config.json'));
-const commands = JSON.parse(fs.readFileSync('./commands.json'));
 const economy = JSON.parse(fs.readFileSync('./economy.json'));
-const liveBreaks = JSON.parse(fs.readFileSync('./liveBreaks.json'));
-const packs = JSON.parse(fs.readFileSync('./packs.json'));
-const auction = JSON.parse(fs.readFileSync('./auction.json'));
-const admin = JSON.parse(fs.readFileSync('./admin.json'));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const db = new sqlite3.Database(config.databasePath, (err) => {
-    if (err) console.error(err.message);
-    console.log('Connected to the SQLite database.');
+    if (err) {
+        console.error("❌ Database Connection Error:", err.message);
+    } else {
+        console.log("✅ Connected to the SQLite database.");
+    }
+});
+
+// Ensure users table exists
+db.run(`CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    balance INTEGER DEFAULT 0
+)`, (err) => {
+    if (err) console.error("❌ Error creating users table:", err.message);
+    else console.log("✅ Users table is ready.");
 });
 
 // Define slash commands
 const slashCommands = [
     new SlashCommandBuilder().setName('ping').setDescription('Check bot response'),
     new SlashCommandBuilder().setName('claim').setDescription('Claim your daily coins'),
-    new SlashCommandBuilder().setName('balance').setDescription('Check your balance'),
-    new SlashCommandBuilder().setName('joinbreak').setDescription('Join a live break').addStringOption(option => option.setName('break_name').setDescription('Name of the break').setRequired(true))
+    new SlashCommandBuilder().setName('balance').setDescription('Check your balance')
 ].map(command => command.toJSON());
 
 // Register Slash Commands
@@ -52,49 +58,45 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
-    const { commandName } = interaction;
     const userId = interaction.user.id;
 
-    if (commandName === 'ping') {
+    if (interaction.commandName === 'ping') {
         await interaction.reply('🏓 Pong!');
-    } else if (commandName === 'claim') {
+    } else if (interaction.commandName === 'claim') {
         db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
-            if (err) return interaction.reply('❌ Error accessing balance.');
-            
+            if (err) {
+                console.error("❌ Database Error:", err.message);
+                return interaction.reply('❌ Error accessing balance.');
+            }
+
             const amount = economy.claimAmount;
             if (!row) {
-                db.run(`INSERT INTO users (user_id, balance) VALUES (?, ?)`, [userId, amount]);
+                db.run(`INSERT INTO users (user_id, balance) VALUES (?, ?)`, [userId, amount], (err) => {
+                    if (err) {
+                        console.error("❌ Error inserting new user:", err.message);
+                        return interaction.reply('❌ Could not claim coins.');
+                    }
+                    interaction.reply(`✅ You have claimed **${amount} coins**!`);
+                });
             } else {
-                db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [amount, userId]);
+                db.run(`UPDATE users SET balance = balance + ? WHERE user_id = ?`, [amount, userId], (err) => {
+                    if (err) {
+                        console.error("❌ Error updating balance:", err.message);
+                        return interaction.reply('❌ Could not claim coins.');
+                    }
+                    interaction.reply(`✅ You have claimed **${amount} coins**! Your new balance is **${row.balance + amount}**.`);
+                });
             }
-            interaction.reply(`✅ You have claimed **${amount} coins**! Your balance has been updated.`);
         });
-    } else if (commandName === 'balance') {
+    } else if (interaction.commandName === 'balance') {
         db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
-            if (err) return interaction.reply('❌ Error accessing balance.');
+            if (err) {
+                console.error("❌ Database Error:", err.message);
+                return interaction.reply('❌ Error accessing balance.');
+            }
             
             const balance = row ? row.balance : 0;
             interaction.reply(`💰 Your current balance is: **${balance} coins**`);
-        });
-    } else if (commandName === 'joinbreak') {
-        const breakName = interaction.options.getString('break_name');
-        
-        db.get(`SELECT id, price FROM live_breaks WHERE name = ?`, [breakName], (err, row) => {
-            if (err || !row) return interaction.reply('❌ Live break not found.');
-            
-            const breakId = row.id;
-            const price = row.price;
-            
-            db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, userRow) => {
-                if (err || !userRow || userRow.balance < price) {
-                    return interaction.reply('❌ You do not have enough coins to join this break.');
-                }
-                
-                db.run(`UPDATE users SET balance = balance - ? WHERE user_id = ?`, [price, userId]);
-                db.run(`INSERT INTO live_break_entries (user_id, break_id) VALUES (?, ?)`, [userId, breakId]);
-                
-                interaction.reply(`✅ You have successfully joined the live break **${breakName}**!`);
-            });
         });
     }
 });
