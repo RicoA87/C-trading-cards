@@ -1,0 +1,14 @@
+{
+  "name": "discord-card-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for digital trading cards.",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "sqlite3": "^5.1.6",
+    "dotenv": "^16.0.3"
+  }
+}
