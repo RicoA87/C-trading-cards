@@ -1,0 +1,15 @@
+{
+  "claim": "!claim",
+  "balance": "!balance",
+  "claimAmount": 250,
+  "dailyBonus": 500,
+  "streakBonus": {
+    "day1": 100,
+    "day3": 300,
+    "day7": 1000
+  },
+  "packCost": {
+    "standard": 200,
+    "specialty": 500
+  }
+}
