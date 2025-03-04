@@ -1,0 +1,5 @@
+{
+  "databasePath": "/app/cards.db",
+  "botPrefix": "!",
+  "adminRole": "Administrator"
+}
