@@ -51,7 +51,17 @@ const slashCommands = [
         .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true))
         .addStringOption(option => option.setName('image').setDescription('Image URL').setRequired(true))
         .addStringOption(option => option.setName('rarity').setDescription('Rarity Level').setRequired(true))
-        .addIntegerOption(option => option.setName('value').setDescription('Coin Value').setRequired(true))
+        .addIntegerOption(option => option.setName('value').setDescription('Coin Value').setRequired(true)),
+    new SlashCommandBuilder().setName('viewcard')
+        .setDescription('View a card’s details')
+        .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true)),
+    new SlashCommandBuilder().setName('editcard')
+        .setDescription('Edit an existing card (Admin Only)')
+        .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true))
+        .addStringOption(option => option.setName('newname').setDescription('New Card Name'))
+        .addStringOption(option => option.setName('image').setDescription('New Image URL'))
+        .addStringOption(option => option.setName('rarity').setDescription('New Rarity Level'))
+        .addIntegerOption(option => option.setName('value').setDescription('New Coin Value'))
 ].map(command => command.toJSON());
 
 // Register Slash Commands
@@ -77,75 +87,65 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
     const userId = interaction.user.id;
-    const now = Date.now();
-    const cooldown = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
-    if (interaction.commandName === 'ping') {
-        await interaction.reply('🏓 Pong!');
-    } else if (interaction.commandName === 'claim') {
-        db.get(`SELECT balance, last_claim FROM users WHERE user_id = ?`, [userId], (err, row) => {
+    if (interaction.commandName === 'viewcard') {
+        const name = interaction.options.getString('name');
+
+        db.get(`SELECT * FROM cards WHERE name = ?`, [name], (err, row) => {
             if (err) {
                 console.error("❌ Database Error:", err.message);
-                return interaction.reply('❌ Error accessing balance.');
+                return interaction.reply('❌ Error retrieving card.');
             }
-
-            if (row && now - row.last_claim < cooldown) {
-                const remainingTime = Math.ceil((cooldown - (now - row.last_claim)) / (60 * 60 * 1000));
-                return interaction.reply(`⏳ You can claim again in **${remainingTime} hours**.`);
-            }
-
-            const amount = economy.claimAmount;
             if (!row) {
-                db.run(`INSERT INTO users (user_id, balance, last_claim) VALUES (?, ?, ?)`, [userId, amount, now], (err) => {
-                    if (err) {
-                        console.error("❌ Error inserting new user:", err.message);
-                        return interaction.reply('❌ Could not claim coins.');
-                    }
-                    interaction.reply(`✅ You have claimed **${amount} coins**!`);
-                });
-            } else {
-                db.run(`UPDATE users SET balance = balance + ?, last_claim = ? WHERE user_id = ?`, [amount, now, userId], (err) => {
-                    if (err) {
-                        console.error("❌ Error updating balance:", err.message);
-                        return interaction.reply('❌ Could not claim coins.');
-                    }
-                    interaction.reply(`✅ You have claimed **${amount} coins**! Your new balance is **${row.balance + amount}**.`);
-                });
+                return interaction.reply(`❌ No card found with the name **${name}**.`);
             }
+
+            const cardEmbed = {
+                color: 0x0099ff,
+                title: row.name,
+                description: `**Rarity:** ${row.rarity}\n**Value:** ${row.value} coins`,
+                image: { url: row.image_url },
+            };
+
+            interaction.reply({ embeds: [cardEmbed] });
         });
-    } else if (interaction.commandName === 'balance') {
-        db.get(`SELECT balance FROM users WHERE user_id = ?`, [userId], (err, row) => {
-            if (err) {
-                console.error("❌ Database Error:", err.message);
-                return interaction.reply('❌ Error accessing balance.');
-            }
-            
-            const balance = row ? row.balance : 0;
-            interaction.reply(`💰 Your current balance is: **${balance} coins**`);
-        });
-    } else if (interaction.commandName === 'addcard') {
+    } else if (interaction.commandName === 'editcard') {
         if (!interaction.member.permissions.has('ADMINISTRATOR')) {
-            return interaction.reply({ content: '❌ You do not have permission to add cards.', ephemeral: true });
+            return interaction.reply({ content: '❌ You do not have permission to edit cards.', ephemeral: true });
         }
 
         const name = interaction.options.getString('name');
+        const newName = interaction.options.getString('newname');
         const image = interaction.options.getString('image');
         const rarity = interaction.options.getString('rarity');
         const value = interaction.options.getInteger('value');
 
-        db.get(`SELECT name FROM cards WHERE name = ?`, [name], (err, row) => {
-            if (row) {
-                return interaction.reply(`❌ A card with the name **${name}** already exists.`);
+        db.get(`SELECT * FROM cards WHERE name = ?`, [name], (err, row) => {
+            if (err) {
+                console.error("❌ Database Error:", err.message);
+                return interaction.reply('❌ Error retrieving card.');
+            }
+            if (!row) {
+                return interaction.reply(`❌ No card found with the name **${name}**.`);
             }
 
-            db.run(`INSERT INTO cards (name, image_url, rarity, value) VALUES (?, ?, ?, ?)`,
-                [name, image, rarity, value], (err) => {
-                    if (err) {
-                        console.error("❌ Error adding card:", err.message);
-                        return interaction.reply('❌ Failed to add card.');
-                    }
-                    interaction.reply(`✅ Card **${name}** (Rarity: ${rarity}) added successfully!`);
-                });
+            const updates = [];
+            const values = [];
+
+            if (newName) { updates.push("name = ?"); values.push(newName); }
+            if (image) { updates.push("image_url = ?"); values.push(image); }
+            if (rarity) { updates.push("rarity = ?"); values.push(rarity); }
+            if (value !== null) { updates.push("value = ?"); values.push(value); }
+
+            values.push(name);
+
+            db.run(`UPDATE cards SET ${updates.join(', ')} WHERE name = ?`, values, (err) => {
+                if (err) {
+                    console.error("❌ Error updating card:", err.message);
+                    return interaction.reply('❌ Failed to update card.');
+                }
+                interaction.reply(`✅ Card **${name}** updated successfully!`);
+            });
         });
     }
 });
