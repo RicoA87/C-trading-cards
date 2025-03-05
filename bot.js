@@ -12,7 +12,7 @@ const config = JSON.parse(fs.readFileSync('./config.json'));
 const economy = JSON.parse(fs.readFileSync('./economy.json'));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const db = new sqlite3.Database(config.databasePath, (err) => {
+const db = new sqlite3.Database('./cards.db', (err) => {
     if (err) {
         console.error("❌ Database Connection Error:", err.message);
     } else {
@@ -51,19 +51,7 @@ const slashCommands = [
         .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true))
         .addStringOption(option => option.setName('image').setDescription('Image URL').setRequired(true))
         .addStringOption(option => option.setName('rarity').setDescription('Rarity Level').setRequired(true))
-        .addIntegerOption(option => option.setName('value').setDescription('Coin Value').setRequired(true)),
-    new SlashCommandBuilder().setName('viewcard')
-        .setDescription('View a card’s details')
-        .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true)),
-    new SlashCommandBuilder().setName('editcard')
-        .setDescription('Edit an existing card (Admin Only)')
-        .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true))
-        .addStringOption(option => option.setName('newname').setDescription('New Card Name'))
-        .addStringOption(option => option.setName('image').setDescription('New Image URL'))
-        .addStringOption(option => option.setName('rarity').setDescription('New Rarity Level'))
-        .addIntegerOption(option => option.setName('value').setDescription('New Coin Value')),
-    new SlashCommandBuilder().setName('debugcards')
-        .setDescription('Shows all stored cards (Admin Only)')
+        .addIntegerOption(option => option.setName('value').setDescription('Coin Value').setRequired(true))
 ].map(command => command.toJSON());
 
 // Register Slash Commands
@@ -88,17 +76,52 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
+    const userId = interaction.user.id;
+    const now = Date.now();
+    const cooldown = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+
+    if (interaction.commandName === 'claim') {
+        db.get(`SELECT balance, last_claim FROM users WHERE user_id = ?`, [userId], (err, row) => {
+            if (err) {
+                console.error("❌ Database Error:", err.message);
+                return interaction.reply('❌ Error accessing balance.');
+            }
+
+            if (row && now - row.last_claim < cooldown) {
+                const remainingTime = Math.ceil((cooldown - (now - row.last_claim)) / (60 * 60 * 1000));
+                return interaction.reply(`⏳ You can claim again in **${remainingTime} hours**.`);
+            }
+
+            const amount = 250; // Default claim amount
+            if (!row) {
+                db.run(`INSERT INTO users (user_id, balance, last_claim) VALUES (?, ?, ?)`, [userId, amount, now], (err) => {
+                    if (err) {
+                        console.error("❌ Error inserting new user:", err.message);
+                        return interaction.reply('❌ Could not claim coins.');
+                    }
+                    interaction.reply(`✅ You have claimed **${amount} coins**!`);
+                });
+            } else {
+                db.run(`UPDATE users SET balance = balance + ?, last_claim = ? WHERE user_id = ?`, [amount, now, userId], (err) => {
+                    if (err) {
+                        console.error("❌ Error updating balance:", err.message);
+                        return interaction.reply('❌ Could not claim coins.');
+                    }
+                    interaction.reply(`✅ You have claimed **${amount} coins**! Your new balance is **${row.balance + amount}**.`);
+                });
+            }
+        });
+    }
+    
     if (interaction.commandName === 'debugcards') {
         db.all(`SELECT * FROM cards`, [], (err, rows) => {
             if (err) {
                 console.error("❌ Database Error:", err.message);
                 return interaction.reply('❌ Error retrieving cards.');
             }
-
             if (rows.length === 0) {
                 return interaction.reply('📂 No cards found in the database.');
             }
-
             let cardList = rows.map(card => `**${card.name}** - ${card.rarity} (${card.value} coins)`).join("\n");
             interaction.reply(`📋 **Stored Cards:**\n${cardList}`);
         });
@@ -107,4 +130,3 @@ client.on('interactionCreate', async (interaction) => {
 
 // Start the bot
 client.login(process.env.TOKEN);
-
