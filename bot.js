@@ -107,3 +107,4 @@ client.on('interactionCreate', async (interaction) => {
 
 // Start the bot
 client.login(process.env.TOKEN);
+
