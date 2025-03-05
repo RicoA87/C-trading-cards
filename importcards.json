@@ -1,0 +1,27 @@
+const fs = require('fs');
+const csv = require('csv-parser');
+const sqlite3 = require('sqlite3').verbose();
+
+// Connect to the database
+const db = new sqlite3.Database('./cards.db', (err) => {
+    if (err) console.error("❌ Database Connection Error:", err.message);
+    else console.log("✅ Connected to the database.");
+});
+
+function importCardsFromCSV() {
+    fs.createReadStream('cards.csv')
+        .pipe(csv())
+        .on('data', (row) => {
+            db.run(`INSERT INTO cards (name, image_url, rarity, value) VALUES (?, ?, ?, ?)`,
+                [row.name, row.image_url, row.rarity, row.value], (err) => {
+                    if (err) console.error(`❌ Error adding card: ${row.name}`);
+                    else console.log(`✅ Card added: ${row.name}`);
+                });
+        })
+        .on('end', () => {
+            console.log('✅ All cards have been imported successfully.');
+        });
+}
+
+// Run the import function
+importCardsFromCSV();
