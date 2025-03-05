@@ -61,7 +61,9 @@ const slashCommands = [
         .addStringOption(option => option.setName('newname').setDescription('New Card Name'))
         .addStringOption(option => option.setName('image').setDescription('New Image URL'))
         .addStringOption(option => option.setName('rarity').setDescription('New Rarity Level'))
-        .addIntegerOption(option => option.setName('value').setDescription('New Coin Value'))
+        .addIntegerOption(option => option.setName('value').setDescription('New Coin Value')),
+    new SlashCommandBuilder().setName('debugcards')
+        .setDescription('Shows all stored cards (Admin Only)')
 ].map(command => command.toJSON());
 
 // Register Slash Commands
@@ -86,66 +88,19 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
-    const userId = interaction.user.id;
-
-    if (interaction.commandName === 'viewcard') {
-        const name = interaction.options.getString('name');
-
-        db.get(`SELECT * FROM cards WHERE name = ?`, [name], (err, row) => {
+    if (interaction.commandName === 'debugcards') {
+        db.all(`SELECT * FROM cards`, [], (err, rows) => {
             if (err) {
                 console.error("❌ Database Error:", err.message);
-                return interaction.reply('❌ Error retrieving card.');
-            }
-            if (!row) {
-                return interaction.reply(`❌ No card found with the name **${name}**.`);
+                return interaction.reply('❌ Error retrieving cards.');
             }
 
-            const cardEmbed = {
-                color: 0x0099ff,
-                title: row.name,
-                description: `**Rarity:** ${row.rarity}\n**Value:** ${row.value} coins`,
-                image: { url: row.image_url },
-            };
-
-            interaction.reply({ embeds: [cardEmbed] });
-        });
-    } else if (interaction.commandName === 'editcard') {
-        if (!interaction.member.permissions.has('ADMINISTRATOR')) {
-            return interaction.reply({ content: '❌ You do not have permission to edit cards.', ephemeral: true });
-        }
-
-        const name = interaction.options.getString('name');
-        const newName = interaction.options.getString('newname');
-        const image = interaction.options.getString('image');
-        const rarity = interaction.options.getString('rarity');
-        const value = interaction.options.getInteger('value');
-
-        db.get(`SELECT * FROM cards WHERE name = ?`, [name], (err, row) => {
-            if (err) {
-                console.error("❌ Database Error:", err.message);
-                return interaction.reply('❌ Error retrieving card.');
-            }
-            if (!row) {
-                return interaction.reply(`❌ No card found with the name **${name}**.`);
+            if (rows.length === 0) {
+                return interaction.reply('📂 No cards found in the database.');
             }
 
-            const updates = [];
-            const values = [];
-
-            if (newName) { updates.push("name = ?"); values.push(newName); }
-            if (image) { updates.push("image_url = ?"); values.push(image); }
-            if (rarity) { updates.push("rarity = ?"); values.push(rarity); }
-            if (value !== null) { updates.push("value = ?"); values.push(value); }
-
-            values.push(name);
-
-            db.run(`UPDATE cards SET ${updates.join(', ')} WHERE name = ?`, values, (err) => {
-                if (err) {
-                    console.error("❌ Error updating card:", err.message);
-                    return interaction.reply('❌ Failed to update card.');
-                }
-                interaction.reply(`✅ Card **${name}** updated successfully!`);
-            });
+            let cardList = rows.map(card => `**${card.name}** - ${card.rarity} (${card.value} coins)`).join("\n");
+            interaction.reply(`📋 **Stored Cards:**\n${cardList}`);
         });
     }
 });
