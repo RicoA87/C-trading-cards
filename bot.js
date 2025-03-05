@@ -20,7 +20,7 @@ const db = new sqlite3.Database(config.databasePath, (err) => {
     }
 });
 
-// Ensure users table exists
+// Ensure tables exist
 db.run(`CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     balance INTEGER DEFAULT 0,
@@ -30,11 +30,28 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     else console.log("✅ Users table is ready.");
 });
 
+db.run(`CREATE TABLE IF NOT EXISTS cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    image_url TEXT,
+    rarity TEXT,
+    value INTEGER
+)`, (err) => {
+    if (err) console.error("❌ Error creating cards table:", err.message);
+    else console.log("✅ Cards table is ready.");
+});
+
 // Define slash commands
 const slashCommands = [
     new SlashCommandBuilder().setName('ping').setDescription('Check bot response'),
     new SlashCommandBuilder().setName('claim').setDescription('Claim your daily coins'),
-    new SlashCommandBuilder().setName('balance').setDescription('Check your balance')
+    new SlashCommandBuilder().setName('balance').setDescription('Check your balance'),
+    new SlashCommandBuilder().setName('addcard')
+        .setDescription('Add a new card to the collection (Admin Only)')
+        .addStringOption(option => option.setName('name').setDescription('Card Name').setRequired(true))
+        .addStringOption(option => option.setName('image').setDescription('Image URL').setRequired(true))
+        .addStringOption(option => option.setName('rarity').setDescription('Rarity Level').setRequired(true))
+        .addIntegerOption(option => option.setName('value').setDescription('Coin Value').setRequired(true))
 ].map(command => command.toJSON());
 
 // Register Slash Commands
@@ -105,6 +122,30 @@ client.on('interactionCreate', async (interaction) => {
             
             const balance = row ? row.balance : 0;
             interaction.reply(`💰 Your current balance is: **${balance} coins**`);
+        });
+    } else if (interaction.commandName === 'addcard') {
+        if (!interaction.member.permissions.has('ADMINISTRATOR')) {
+            return interaction.reply({ content: '❌ You do not have permission to add cards.', ephemeral: true });
+        }
+
+        const name = interaction.options.getString('name');
+        const image = interaction.options.getString('image');
+        const rarity = interaction.options.getString('rarity');
+        const value = interaction.options.getInteger('value');
+
+        db.get(`SELECT name FROM cards WHERE name = ?`, [name], (err, row) => {
+            if (row) {
+                return interaction.reply(`❌ A card with the name **${name}** already exists.`);
+            }
+
+            db.run(`INSERT INTO cards (name, image_url, rarity, value) VALUES (?, ?, ?, ?)`,
+                [name, image, rarity, value], (err) => {
+                    if (err) {
+                        console.error("❌ Error adding card:", err.message);
+                        return interaction.reply('❌ Failed to add card.');
+                    }
+                    interaction.reply(`✅ Card **${name}** (Rarity: ${rarity}) added successfully!`);
+                });
         });
     }
 });
